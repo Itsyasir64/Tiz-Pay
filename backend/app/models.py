@@ -10,7 +10,7 @@ class Wallet(Base):
     __tablename__ = "wallets"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    owner_name: Mapped[str] = mapped_column(String(100), default="Alex Morgan")
+    owner_name: Mapped[str] = mapped_column(String(100), default="Yasir Ali")
     balance_cents: Mapped[int] = mapped_column(Integer, default=2_458_075)
     currency: Mapped[str] = mapped_column(String(3), default="USD")
 

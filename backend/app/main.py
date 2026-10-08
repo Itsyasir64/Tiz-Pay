@@ -1,8 +1,8 @@
 from contextlib import asynccontextmanager
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, time, timedelta, timezone
 import os
 
-from fastapi import Depends, FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from sqlalchemy import select
@@ -105,10 +105,34 @@ def overview(session: Session = Depends(get_session)):
 
 
 @app.get("/api/transactions")
-def transactions(session: Session = Depends(get_session)):
-    items = session.scalars(
-        select(Transaction).order_by(Transaction.created_at.desc()).limit(50)
-    ).all()
+def transactions(
+    start_date: date | None = Query(default=None),
+    end_date: date | None = Query(default=None),
+    session: Session = Depends(get_session),
+):
+    if (start_date is None) != (end_date is None):
+        raise HTTPException(
+            status_code=422, detail="Provide both start_date and end_date"
+        )
+    if start_date is not None and end_date is not None and start_date > end_date:
+        raise HTTPException(
+            status_code=422, detail="start_date must be on or before end_date"
+        )
+
+    statement = select(Transaction).order_by(Transaction.created_at.desc())
+    if start_date is not None and end_date is not None:
+        range_start = datetime.combine(start_date, time.min, tzinfo=timezone.utc)
+        range_end = datetime.combine(
+            end_date + timedelta(days=1), time.min, tzinfo=timezone.utc
+        )
+        statement = statement.where(
+            Transaction.created_at >= range_start,
+            Transaction.created_at < range_end,
+        )
+    else:
+        statement = statement.limit(50)
+
+    items = session.scalars(statement).all()
     return [transaction_data(item) for item in items]
 
 
