@@ -8,12 +8,12 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.database import Base, SessionLocal, engine
+from app.database import Base, SessionLocal, create_database, engine
 from app.models import Transaction, Wallet
 
 
 def initialize_database() -> None:
-    Base.metadata.create_all(bind=engine)
+    create_database()
     with SessionLocal() as session:
         if session.scalar(select(Wallet.id).limit(1)) is not None:
             return
