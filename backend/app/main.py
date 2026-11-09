@@ -1,14 +1,15 @@
 from contextlib import asynccontextmanager
 from datetime import date, datetime, time, timedelta, timezone
 import os
+from typing import Annotated
 
 from fastapi import Depends, FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel, Field
-from sqlalchemy import select
+from pydantic import BaseModel, Field, StringConstraints
+from sqlalchemy import case, func, select
 from sqlalchemy.orm import Session
 
-from app.database import Base, SessionLocal, create_database, engine
+from app.database import SessionLocal, create_database, get_db
 from app.models import Transaction, Wallet
 
 
@@ -59,17 +60,14 @@ app.add_middleware(
 )
 
 
-def get_session():
-    with SessionLocal() as session:
-        yield session
-
-
 class TransferRequest(BaseModel):
-    recipient: str = Field(min_length=2, max_length=100)
+    recipient: Annotated[
+        str, StringConstraints(strip_whitespace=True, min_length=2, max_length=100)
+    ]
     amount_cents: int = Field(gt=0, le=10_000_000)
 
 
-def transaction_data(transaction: Transaction) -> dict:
+def transaction_data(transaction: Transaction) -> dict[str, int | str | datetime]:
     return {
         "id": transaction.id,
         "title": transaction.title,
@@ -82,24 +80,46 @@ def transaction_data(transaction: Transaction) -> dict:
 
 
 @app.get("/health")
-def health():
+def health() -> dict[str, str]:
     return {"status": "ok"}
 
 
 @app.get("/api/overview")
-def overview(session: Session = Depends(get_session)):
+def overview(session: Session = Depends(get_db)):
     wallet = session.scalar(select(Wallet).limit(1))
     if wallet is None:
         raise HTTPException(status_code=503, detail="Wallet is not initialized")
     transactions = session.scalars(
         select(Transaction).order_by(Transaction.created_at.desc()).limit(8)
     ).all()
+    totals = session.execute(
+        select(
+            func.coalesce(
+                func.sum(
+                    case(
+                        (Transaction.direction == "in", Transaction.amount_cents),
+                        else_=0,
+                    )
+                ),
+                0,
+            ).label("income_cents"),
+            func.coalesce(
+                func.sum(
+                    case(
+                        (Transaction.direction == "out", Transaction.amount_cents),
+                        else_=0,
+                    )
+                ),
+                0,
+            ).label("spending_cents"),
+        )
+    ).one()
     return {
         "owner_name": wallet.owner_name,
         "balance_cents": wallet.balance_cents,
         "currency": wallet.currency,
-        "income_cents": 420000,
-        "spending_cents": 184500,
+        "income_cents": totals.income_cents,
+        "spending_cents": totals.spending_cents,
         "transactions": [transaction_data(item) for item in transactions],
     }
 
@@ -108,7 +128,7 @@ def overview(session: Session = Depends(get_session)):
 def transactions(
     start_date: date | None = Query(default=None),
     end_date: date | None = Query(default=None),
-    session: Session = Depends(get_session),
+    session: Session = Depends(get_db),
 ):
     if (start_date is None) != (end_date is None):
         raise HTTPException(
@@ -138,7 +158,7 @@ def transactions(
 
 @app.post("/api/transfers", status_code=201)
 def create_transfer(
-    request: TransferRequest, session: Session = Depends(get_session)
+    request: TransferRequest, session: Session = Depends(get_db)
 ):
     wallet = session.scalar(select(Wallet).limit(1).with_for_update())
     if wallet is None:
