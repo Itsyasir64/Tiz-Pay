@@ -196,6 +196,8 @@ h1 { margin: 10px 0 5px; color: #252922; font-size: 26px; font-weight: 600; lett
 .account-detail .password-note { color: #a0a59c; font-size: 8px; }
 .account-done { width: 100%; height: 39px; margin-top: 17px; border: 0; border-radius: 6px; color: #293022; background: var(--lime); font-size: 10px; font-weight: 800; }
 .account-done:hover { background: #d9f995; }
+.account-signout { width: 100%; height: 36px; margin-top: 9px; border: 1px solid #e6e9e1; border-radius: 6px; color: #6b534e; background: #fff; font-size: 10px; font-weight: 700; }
+.account-signout:hover { border-color: #dfc9c4; background: #fbf7f6; }
 .account-demo-note { margin: 11px 0 0; color: #9a9f96; font-size: 8px; text-align: center; }
 .cards-modal { display: flex; width: min(100%, 500px); max-height: min(820px, calc(100dvh - 32px)); flex-direction: column; align-items: center; padding: 23px; overflow-y: auto; border: 1px solid #eaede4; border-radius: 12px; background: #fff; box-shadow: 0 24px 65px rgb(16 23 13 / 18%); animation: modal-in .2s both; }
 .cards-modal-top { display: flex; width: 100%; align-items: flex-start; justify-content: space-between; }
@@ -509,10 +511,12 @@ h1 { margin: 10px 0 5px; color: #252922; font-size: 26px; font-weight: 600; lett
 .auth-form-options button:hover, .auth-switch button:hover, .auth-back:hover { color: #3d5a26; text-decoration: underline; }
 .auth-submit { display: flex; min-height: 43px; align-items: center; justify-content: center; gap: 9px; margin-top: 3px; border: 0; border-radius: 6px; color: #293022; background: var(--lime); font-size: 10px; font-weight: 800; transition: background .18s, transform .18s; }
 .auth-submit:hover { transform: translateY(-1px); background: #daf995; }
+.auth-submit:disabled { cursor: wait; opacity: .7; transform: none; }
 .auth-submit svg { margin-left: auto; }
 .auth-submit { position: relative; padding: 0 14px; }
 .auth-submit svg { position: absolute; right: 13px; }
 .auth-feedback { margin: 0; padding: 9px 10px; border: 1px solid #d9e8cc; border-radius: 5px; color: #4f6c3b; background: #f2f8e9; font-size: 8px; line-height: 1.5; }
+.auth-feedback-error { border-color: #efd4cf; color: #8d483c; background: #fff6f4; }
 .auth-switch { margin: 16px 0 0; color: #858c7f; font-size: 8px; text-align: center; }
 .auth-switch button { margin-left: 3px; }
 .auth-back { display: block; margin: 15px auto 0; font-size: 9px; }

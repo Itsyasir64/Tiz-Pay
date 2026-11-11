@@ -35,10 +35,25 @@ function displayDate(value) {
   })
 }
 
+function storedAccessToken() {
+  return localStorage.getItem('tizpay_access_token')
+    || sessionStorage.getItem('tizpay_access_token')
+    || ''
+}
+
 function App() {
   const [experience, setExperience] = useState('splash')
-  const [authView, setAuthView] = useState('login')
+  const [authView, setAuthView] = useState(() => {
+    const resetToken = new URLSearchParams(window.location.search).get('reset_token')
+    return resetToken ? 'reset' : 'login'
+  })
   const [authNotice, setAuthNotice] = useState('')
+  const [authError, setAuthError] = useState(false)
+  const [authSubmitting, setAuthSubmitting] = useState(false)
+  const [resetToken, setResetToken] = useState(
+    () => new URLSearchParams(window.location.search).get('reset_token') || '',
+  )
+  const [accessToken, setAccessToken] = useState(storedAccessToken)
   const [overview, setOverview] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -80,13 +95,37 @@ function App() {
   }
 
   useEffect(() => {
-    const timer = window.setTimeout(transitionToAuth, 5000)
+    const timer = window.setTimeout(() => {
+      if (new URLSearchParams(window.location.search).has('reset_token')) setExperience('auth')
+      else if (accessToken) setExperience('dashboard')
+      else transitionToAuth()
+    }, 5000)
     return () => window.clearTimeout(timer)
-  }, [])
+  }, [accessToken])
+
+  function signOut() {
+    localStorage.removeItem('tizpay_access_token')
+    sessionStorage.removeItem('tizpay_access_token')
+    setAccessToken('')
+    setOverview(null)
+    setExperience('auth')
+    setAuthView('login')
+    setAccountOpen(false)
+    setNotice('')
+  }
+
+  async function apiFetch(url, options = {}) {
+    const headers = new Headers(options.headers || {})
+    if (accessToken) headers.set('Authorization', `Bearer ${accessToken}`)
+    const response = await fetch(url, { ...options, headers })
+    if (response.status === 401 && accessToken) signOut()
+    return response
+  }
 
   async function loadOverview() {
+    if (!accessToken) return
     try {
-      const response = await fetch(`${API_URL}/api/overview`)
+      const response = await apiFetch(`${API_URL}/api/overview`)
       if (!response.ok) throw new Error('Could not load your wallet.')
       setOverview(await response.json())
       setError('')
@@ -97,7 +136,11 @@ function App() {
     }
   }
 
-  useEffect(() => { loadOverview() }, [])
+  useEffect(() => {
+    if (!accessToken) return
+    setLoading(true)
+    loadOverview()
+  }, [accessToken])
 
   useEffect(() => {
     if (!statementOpen) return undefined
@@ -115,7 +158,7 @@ function App() {
       setStatementDownloadStatus('')
       try {
         const params = new URLSearchParams({ start_date: statementStartDate, end_date: statementEndDate })
-        const response = await fetch(`${API_URL}/api/transactions?${params}`, { signal: controller.signal })
+        const response = await apiFetch(`${API_URL}/api/transactions?${params}`, { signal: controller.signal })
         const result = await response.json()
         if (!response.ok) throw new Error(result.detail || 'Could not load the statement.')
         setStatementTransactions(result)
@@ -130,7 +173,7 @@ function App() {
     }
     loadStatement()
     return () => controller.abort()
-  }, [statementOpen, statementStartDate, statementEndDate])
+  }, [accessToken, statementOpen, statementStartDate, statementEndDate])
 
   const transactions = useMemo(() => {
     const items = overview?.transactions || []
@@ -151,7 +194,7 @@ function App() {
     setSending(true)
     setNotice('')
     try {
-      const response = await fetch(`${API_URL}/api/transfers`, {
+      const response = await apiFetch(`${API_URL}/api/transfers`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ recipient, amount_cents: amount }),
@@ -278,7 +321,7 @@ function App() {
       return `To receive money, share your TizPay username ${username}. Incoming payments aren’t processed in this demo.`
     }
     if (/username|account|profile|password|personal detail/.test(text)) {
-      return `Your TizPay username is ${username}. Click your profile avatar to see your personal account details. Your password is not stored in this demo.`
+      return `Your TizPay username is ${username}. Click your profile avatar to see your account details. Passwords are stored as secure hashes and are never displayed.`
     }
     if (/activity|transaction|recent|history/.test(text)) {
       const recent = overview?.transactions?.slice(0, 3) || []
@@ -304,16 +347,73 @@ function App() {
     setChatDraft('')
   }
 
-  function handleAuthSubmit(event) {
+  async function handleAuthSubmit(event) {
     event.preventDefault()
     const form = new FormData(event.currentTarget)
     const email = String(form.get('email') || '').trim()
-    if (authView === 'forgot') {
-      setAuthNotice(`If an account exists for ${email}, password reset instructions would be sent.`)
-      return
+    setAuthNotice('')
+    setAuthError(false)
+    setAuthSubmitting(true)
+    try {
+      if (authView === 'forgot') {
+        const response = await fetch(`${API_URL}/api/auth/password-reset`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email }),
+        })
+        const result = await response.json()
+        if (!response.ok) throw new Error(result.detail || 'Could not request a password reset.')
+        setAuthNotice(result.message)
+        return
+      }
+
+      if (authView === 'reset') {
+        const response = await fetch(`${API_URL}/api/auth/password-reset/confirm`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            token: resetToken,
+            new_password: String(form.get('password') || ''),
+          }),
+        })
+        const result = await response.json()
+        if (!response.ok) throw new Error(result.detail || 'Could not reset your password.')
+        signOut()
+        setAuthNotice(result.message)
+        setAuthView('login')
+        setResetToken('')
+        window.history.replaceState(null, '', window.location.pathname)
+        return
+      }
+
+      const signup = authView === 'signup'
+      const response = await fetch(`${API_URL}/api/auth/${signup ? 'signup' : 'login'}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email,
+          password: String(form.get('password') || ''),
+          ...(authView === 'login' ? { remember_me: form.get('remember') === 'on' } : {}),
+          ...(signup ? { full_name: String(form.get('name') || '').trim() } : {}),
+        }),
+      })
+      const result = await response.json()
+      if (!response.ok) throw new Error(result.detail || 'Could not sign in.')
+
+      localStorage.removeItem('tizpay_access_token')
+      sessionStorage.removeItem('tizpay_access_token')
+      const storage = !signup && form.get('remember') === 'on' ? localStorage : sessionStorage
+      storage.setItem('tizpay_access_token', result.access_token)
+      setOverview(null)
+      setAccessToken(result.access_token)
+      setExperience('dashboard')
+      setNotice(signup ? 'Your account is ready.' : 'Signed in successfully.')
+    } catch (err) {
+      setAuthError(true)
+      setAuthNotice(err.message || 'Could not reach the authentication service.')
+    } finally {
+      setAuthSubmitting(false)
     }
-    setExperience('dashboard')
-    setNotice(authView === 'signup' ? 'Welcome to the TizPay demo.' : 'Signed in to the TizPay demo.')
   }
 
   return (
@@ -343,30 +443,30 @@ function App() {
           <div className="auth-trust-card"><ShieldCheck size={17} /><span><strong>Your money, your view.</strong><small>A simple, private-feeling space to stay on top of things.</small></span></div>
         </section>
         <section className="auth-card" aria-labelledby="auth-title">
-          {authView !== 'forgot' && <div className="auth-tabs" role="tablist" aria-label="Account access">
+          {authView !== 'forgot' && authView !== 'reset' && <div className="auth-tabs" role="tablist" aria-label="Account access">
             <button className={authView === 'login' ? 'auth-tab active' : 'auth-tab'} role="tab" aria-selected={authView === 'login'} onClick={() => { setAuthView('login'); setAuthNotice('') }}>Sign in</button>
             <button className={authView === 'signup' ? 'auth-tab active' : 'auth-tab'} role="tab" aria-selected={authView === 'signup'} onClick={() => { setAuthView('signup'); setAuthNotice('') }}>Create account</button>
           </div>}
           <div className="auth-card-heading">
-            <span className="auth-heading-icon">{authView === 'forgot' ? <KeyRound size={19} /> : authView === 'signup' ? <UserRound size={19} /> : <LockKeyhole size={19} />}</span>
-            <p className="auth-eyebrow">{authView === 'forgot' ? 'ACCOUNT RECOVERY' : authView === 'signup' ? 'A FRESH START' : 'WELCOME BACK'}</p>
-            <h2 id="auth-title">{authView === 'forgot' ? 'Reset your password' : authView === 'signup' ? 'Create your account' : 'Good to see you.'}</h2>
-            <p>{authView === 'forgot' ? 'Enter the email linked to your account and we’ll help you get back in.' : authView === 'signup' ? 'A clearer view of your money starts here.' : 'Sign in to your personal money space.'}</p>
+            <span className="auth-heading-icon">{authView === 'forgot' || authView === 'reset' ? <KeyRound size={19} /> : authView === 'signup' ? <UserRound size={19} /> : <LockKeyhole size={19} />}</span>
+            <p className="auth-eyebrow">{authView === 'forgot' || authView === 'reset' ? 'ACCOUNT RECOVERY' : authView === 'signup' ? 'A FRESH START' : 'WELCOME BACK'}</p>
+            <h2 id="auth-title">{authView === 'forgot' ? 'Reset your password' : authView === 'reset' ? 'Choose a new password' : authView === 'signup' ? 'Create your account' : 'Good to see you.'}</h2>
+            <p>{authView === 'forgot' ? 'Enter your email and we’ll send a one-time reset link if email delivery is configured.' : authView === 'reset' ? 'Choose a new password for your TizPay account.' : authView === 'signup' ? 'A clearer view of your money starts here.' : 'Sign in to your personal money space.'}</p>
           </div>
           <form className="auth-form" onSubmit={handleAuthSubmit}>
             {authView === 'signup' && <label>Full name<span className="auth-input"><UserRound size={16} /><input autoComplete="name" name="name" placeholder="Your full name" minLength="2" required /></span></label>}
-            <label>Email address<span className="auth-input"><Mail size={16} /><input autoComplete="email" name="email" type="email" placeholder="you@example.com" required /></span></label>
-            {authView !== 'forgot' && <label>Password<span className="auth-input"><LockKeyhole size={16} /><input autoComplete={authView === 'signup' ? 'new-password' : 'current-password'} name="password" type="password" placeholder="At least 8 characters" minLength={authView === 'signup' ? 8 : undefined} required /></span></label>}
+            {authView !== 'reset' && <label>Email address<span className="auth-input"><Mail size={16} /><input autoComplete="email" name="email" type="email" placeholder="you@example.com" required /></span></label>}
+            {authView !== 'forgot' && <label>{authView === 'reset' ? 'New password' : 'Password'}<span className="auth-input"><LockKeyhole size={16} /><input autoComplete={authView === 'login' ? 'current-password' : 'new-password'} name="password" type="password" placeholder="At least 8 characters" minLength={authView === 'login' ? undefined : 8} maxLength="128" required /></span></label>}
             {authView === 'login' && <div className="auth-form-options"><label className="auth-remember"><input type="checkbox" name="remember" /> <span>Remember me</span></label><button type="button" onClick={() => { setAuthView('forgot'); setAuthNotice('') }}>Forgot password?</button></div>}
-            {authNotice && <p className="auth-feedback" role="status">{authNotice}</p>}
-            <button className="auth-submit" type="submit">{authView === 'forgot' ? 'Send reset instructions' : authView === 'signup' ? 'Create account' : 'Sign in'} <ArrowRight size={17} /></button>
+            {authNotice && <p className={`auth-feedback ${authError ? 'auth-feedback-error' : ''}`} role="status">{authNotice}</p>}
+            <button className="auth-submit" type="submit" disabled={authSubmitting}>{authSubmitting ? 'Please wait…' : authView === 'forgot' ? 'Send reset instructions' : authView === 'reset' ? 'Update password' : authView === 'signup' ? 'Create account' : 'Sign in'} <ArrowRight size={17} /></button>
           </form>
-          {authView === 'forgot' ? <button className="auth-back" onClick={() => { setAuthView('login'); setAuthNotice('') }}>Back to sign in</button>
-            : <p className="auth-switch">{authView === 'signup' ? 'Already have an account?' : 'New to TizPay?'} <button onClick={() => { setAuthView(authView === 'signup' ? 'login' : 'signup'); setAuthNotice('') }}>{authView === 'signup' ? 'Sign in' : 'Create an account'}</button></p>}
-          <p className="auth-demo-note">Demo access only. Sign-in, account creation, and password recovery are not connected to a real authentication service.</p>
+          {authView === 'forgot' || authView === 'reset' ? <button className="auth-back" type="button" onClick={() => { setAuthView('login'); setAuthNotice(''); setAuthError(false) }}>Back to sign in</button>
+            : <p className="auth-switch">{authView === 'signup' ? 'Already have an account?' : 'New to TizPay?'} <button type="button" onClick={() => { setAuthView(authView === 'signup' ? 'login' : 'signup'); setAuthNotice(''); setAuthError(false) }}>{authView === 'signup' ? 'Sign in' : 'Create an account'}</button></p>}
+          <p className="auth-demo-note">Passwords are stored as secure hashes. Wallet data is available only after signing in.</p>
         </section>
       </div>
-      <footer className="auth-footer"><span>© 2025 TizPay</span><span>Built for everyday clarity</span><button type="button" onClick={() => { setExperience('dashboard'); setNotice('Opened the TizPay local demo.') }}>Explore demo <ArrowRight size={13} /></button></footer>
+      <footer className="auth-footer"><span>© 2025 TizPay</span><span>Built for everyday clarity</span></footer>
     </main> : (
     <div className="app-shell">
       <aside className="sidebar">
@@ -512,12 +612,13 @@ function App() {
           <div className="account-identity"><span className="account-avatar">{initials}</span><div><strong>{ownerName}</strong><span>Personal wallet · {currency}</span></div><ShieldCheck size={19} /></div>
           <div className="account-details">
             <div className="account-detail"><span className="account-detail-icon"><CircleDollarSign size={16} /></span><div><small>Full name</small><strong>{ownerName}</strong></div></div>
+            <div className="account-detail"><span className="account-detail-icon"><Mail size={16} /></span><div><small>Email address</small><strong>{overview?.email || '—'}</strong></div></div>
             <div className="account-detail"><span className="account-detail-icon"><AtSign size={16} /></span><div><small>TizPay username</small><strong>{username}</strong></div></div>
-            <div className="account-detail"><span className="account-detail-icon"><LockKeyhole size={16} /></span><div><small>Password</small><strong className="masked-password" aria-label="Password hidden">••••••••••••</strong><small className="password-note">Hidden for your security</small></div></div>
             <div className="account-detail"><span className="account-detail-icon"><ShieldCheck size={16} /></span><div><small>Account type</small><strong>Personal account</strong></div></div>
           </div>
           <button className="account-done" onClick={() => setAccountOpen(false)}>Done</button>
-          <p className="account-demo-note">Demo profile details. No password is stored or displayed here.</p>
+          <button className="account-signout" onClick={signOut}>Sign out</button>
+          <p className="account-demo-note">Your password is stored as a secure hash and can’t be viewed here.</p>
         </section>
       </div>}
       {statementOpen && <div className="modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setStatementOpen(false) }}>

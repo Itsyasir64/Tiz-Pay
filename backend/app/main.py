@@ -9,38 +9,13 @@ from pydantic import BaseModel, Field, StringConstraints
 from sqlalchemy import case, func, select
 from sqlalchemy.orm import Session
 
-from app.database import SessionLocal, create_database, get_db
-from app.models import Transaction, Wallet
+from app.auth import get_current_user, router as auth_router
+from app.database import create_database, get_db
+from app.models import Transaction, User, Wallet
 
 
 def initialize_database() -> None:
     create_database()
-    with SessionLocal() as session:
-        if session.scalar(select(Wallet.id).limit(1)) is not None:
-            return
-
-        session.add(Wallet())
-        now = datetime.now(timezone.utc)
-        examples = [
-            ("Whole Foods Market", "Shopping", 8425, "out", 1),
-            ("Salary deposit", "Income", 420000, "in", 2),
-            ("Spotify Premium", "Subscriptions", 1099, "out", 3),
-            ("Jordan Lee", "Transfer", 12500, "out", 5),
-            ("Blue Bottle Coffee", "Food & drink", 675, "out", 6),
-        ]
-        session.add_all(
-            [
-                Transaction(
-                    title=title,
-                    category=category,
-                    amount_cents=amount,
-                    direction=direction,
-                    created_at=now - timedelta(days=days_ago),
-                )
-                for title, category, amount, direction, days_ago in examples
-            ]
-        )
-        session.commit()
 
 
 @asynccontextmanager
@@ -50,6 +25,7 @@ async def lifespan(_: FastAPI):
 
 
 app = FastAPI(title="Tiz Pay API", version="0.1.0", lifespan=lifespan)
+app.include_router(auth_router)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=os.getenv(
@@ -85,12 +61,18 @@ def health() -> dict[str, str]:
 
 
 @app.get("/api/overview")
-def overview(session: Session = Depends(get_db)):
-    wallet = session.scalar(select(Wallet).limit(1))
+def overview(
+    user: Annotated[User, Depends(get_current_user)],
+    session: Session = Depends(get_db),
+):
+    wallet = session.scalar(select(Wallet).where(Wallet.user_id == user.id))
     if wallet is None:
-        raise HTTPException(status_code=503, detail="Wallet is not initialized")
+        raise HTTPException(status_code=404, detail="Wallet was not found")
     transactions = session.scalars(
-        select(Transaction).order_by(Transaction.created_at.desc()).limit(8)
+        select(Transaction)
+        .where(Transaction.wallet_id == wallet.id)
+        .order_by(Transaction.created_at.desc())
+        .limit(8)
     ).all()
     totals = session.execute(
         select(
@@ -113,9 +95,11 @@ def overview(session: Session = Depends(get_db)):
                 0,
             ).label("spending_cents"),
         )
+        .where(Transaction.wallet_id == wallet.id)
     ).one()
     return {
         "owner_name": wallet.owner_name,
+        "email": user.email,
         "balance_cents": wallet.balance_cents,
         "currency": wallet.currency,
         "income_cents": totals.income_cents,
@@ -126,6 +110,7 @@ def overview(session: Session = Depends(get_db)):
 
 @app.get("/api/transactions")
 def transactions(
+    user: Annotated[User, Depends(get_current_user)],
     start_date: date | None = Query(default=None),
     end_date: date | None = Query(default=None),
     session: Session = Depends(get_db),
@@ -139,7 +124,15 @@ def transactions(
             status_code=422, detail="start_date must be on or before end_date"
         )
 
-    statement = select(Transaction).order_by(Transaction.created_at.desc())
+    wallet = session.scalar(select(Wallet).where(Wallet.user_id == user.id))
+    if wallet is None:
+        raise HTTPException(status_code=404, detail="Wallet was not found")
+
+    statement = (
+        select(Transaction)
+        .where(Transaction.wallet_id == wallet.id)
+        .order_by(Transaction.created_at.desc())
+    )
     if start_date is not None and end_date is not None:
         range_start = datetime.combine(start_date, time.min, tzinfo=timezone.utc)
         range_end = datetime.combine(
@@ -158,16 +151,21 @@ def transactions(
 
 @app.post("/api/transfers", status_code=201)
 def create_transfer(
-    request: TransferRequest, session: Session = Depends(get_db)
+    request: TransferRequest,
+    user: Annotated[User, Depends(get_current_user)],
+    session: Session = Depends(get_db),
 ):
-    wallet = session.scalar(select(Wallet).limit(1).with_for_update())
+    wallet = session.scalar(
+        select(Wallet).where(Wallet.user_id == user.id).with_for_update()
+    )
     if wallet is None:
-        raise HTTPException(status_code=503, detail="Wallet is not initialized")
+        raise HTTPException(status_code=404, detail="Wallet was not found")
     if request.amount_cents > wallet.balance_cents:
         raise HTTPException(status_code=400, detail="Insufficient wallet balance")
 
     wallet.balance_cents -= request.amount_cents
     transaction = Transaction(
+        wallet_id=wallet.id,
         title=request.recipient.strip(),
         category="Transfer",
         amount_cents=request.amount_cents,

@@ -4,7 +4,7 @@ import os
 from pathlib import Path
 from typing import Generator
 
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
@@ -42,3 +42,37 @@ def get_db() -> Generator[Session, None, None]:
 
 def create_database() -> None:
     Base.metadata.create_all(bind=engine)
+    with engine.begin() as connection:
+        wallet_columns = {
+            column["name"] for column in inspect(connection).get_columns("wallets")
+        }
+        transaction_columns = {
+            column["name"]
+            for column in inspect(connection).get_columns("transactions")
+        }
+        if "user_id" not in wallet_columns:
+            connection.execute(
+                text(
+                    "ALTER TABLE wallets ADD COLUMN user_id INTEGER "
+                    "REFERENCES users(id) ON DELETE CASCADE"
+                )
+            )
+        if "wallet_id" not in transaction_columns:
+            connection.execute(
+                text(
+                    "ALTER TABLE transactions ADD COLUMN wallet_id INTEGER "
+                    "REFERENCES wallets(id) ON DELETE CASCADE"
+                )
+            )
+        connection.execute(
+            text(
+                "CREATE UNIQUE INDEX IF NOT EXISTS uq_wallets_user_id "
+                "ON wallets (user_id)"
+            )
+        )
+        connection.execute(
+            text(
+                "CREATE INDEX IF NOT EXISTS ix_transactions_wallet_id "
+                "ON transactions (wallet_id)"
+            )
+        )
