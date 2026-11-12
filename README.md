@@ -6,6 +6,12 @@ A full-stack wallet dashboard starter built with React, FastAPI, and PostgreSQL.
 
 Requirements: Docker and Docker Compose.
 
+Compose starts PostgreSQL, the FastAPI API, and the Vite development server.
+The API and frontend source directories are mounted into their containers, so
+code changes are picked up during development. PostgreSQL data is kept in the
+`postgres_data` volume; `docker compose down` preserves it, while
+`docker compose down -v` removes it.
+
 From the repository root, generate a signing key once and save it in the
 git-ignored `.env` file. Keep this value private and reuse it when restarting
 the same environment:
@@ -19,10 +25,16 @@ $env:JWT_SECRET_KEY = (python -c "import secrets; print(secrets.token_urlsafe(32
 docker compose up --build
 ```
 
-Open the dashboard at http://localhost:5173 and the API docs at http://localhost:8000/docs.
-Create an account to get a private wallet. Password-reset emails require the
+Open the dashboard at http://localhost:5173, the API docs at
+http://localhost:8000/docs, and the API health check at
+http://localhost:8000/health. Both ports are bound to localhost. Create an
+account to get a private wallet. Password-reset emails require the
 `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`, and `SMTP_FROM`
-environment variables; `SMTP_USE_SSL=true` enables implicit TLS.
+environment variables; `SMTP_USE_SSL=true` enables implicit TLS. Without SMTP
+configuration, password-reset email cannot be sent.
+
+The Compose PostgreSQL credentials are for local development only. Do not
+expose this setup publicly or reuse those credentials in production.
 
 ## Run locally
 
