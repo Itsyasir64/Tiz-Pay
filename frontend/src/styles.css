@@ -199,6 +199,18 @@ h1 { margin: 10px 0 5px; color: #252922; font-size: 26px; font-weight: 600; lett
 .account-signout { width: 100%; height: 36px; margin-top: 9px; border: 1px solid #e6e9e1; border-radius: 6px; color: #6b534e; background: #fff; font-size: 10px; font-weight: 700; }
 .account-signout:hover { border-color: #dfc9c4; background: #fbf7f6; }
 .account-demo-note { margin: 11px 0 0; color: #9a9f96; font-size: 8px; text-align: center; }
+.account-edit-button { display: inline-flex; width: 100%; align-items: center; justify-content: center; min-height: 34px; margin-top: 14px; border: 1px solid #dfe8d4; border-radius: 6px; color: #526844; background: #f4f8ee; font-size: 9px; font-weight: 800; }
+.account-edit-button:hover { background: #edf5e3; }
+.account-editor { display: grid; gap: 10px; margin-top: 14px; padding-top: 4px; }
+.profile-field { display: grid; gap: 5px; color: #596054; font-size: 8px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; }
+.profile-field input { width: 100%; min-height: 38px; padding: 0 11px; border: 1px solid #e1e7db; border-radius: 6px; color: #2f352f; background: #fbfcf8; font-size: 11px; font-weight: 600; }
+.profile-field input:focus { outline: 2px solid rgb(191 223 100 / 40%); border-color: #bfd669; }
+.profile-actions { display: flex; gap: 8px; margin-top: 4px; }
+.profile-cancel, .profile-save { flex: 1; min-height: 35px; border-radius: 6px; font-size: 9px; font-weight: 800; }
+.profile-cancel { border: 1px solid #e7eada; color: #5a6357; background: #fff; }
+.profile-save { border: 0; color: #293022; background: var(--lime); }
+.profile-save:hover:not(:disabled) { background: #d9f995; }
+.profile-save:disabled { cursor: wait; opacity: .7; }
 .cards-modal { display: flex; width: min(100%, 500px); max-height: min(820px, calc(100dvh - 32px)); flex-direction: column; align-items: center; padding: 23px; overflow-y: auto; border: 1px solid #eaede4; border-radius: 12px; background: #fff; box-shadow: 0 24px 65px rgb(16 23 13 / 18%); animation: modal-in .2s both; }
 .cards-modal-top { display: flex; width: 100%; align-items: flex-start; justify-content: space-between; }
 .cards-modal-top h2 { margin: 7px 0 0; color: #292f27; font-size: 22px; font-weight: 700; }
@@ -515,8 +527,17 @@ h1 { margin: 10px 0 5px; color: #252922; font-size: 26px; font-weight: 600; lett
 .auth-submit svg { margin-left: auto; }
 .auth-submit { position: relative; padding: 0 14px; }
 .auth-submit svg { position: absolute; right: 13px; }
-.auth-feedback { margin: 0; padding: 9px 10px; border: 1px solid #d9e8cc; border-radius: 5px; color: #4f6c3b; background: #f2f8e9; font-size: 8px; line-height: 1.5; }
-.auth-feedback-error { border-color: #efd4cf; color: #8d483c; background: #fff6f4; }
+.auth-feedback { display: flex; align-items: center; gap: 10px; margin: 1px 0; padding: 10px 12px; border: 1px solid #e6e9e1; border-radius: 9px; color: #56614e; background: #f8faf6; box-shadow: 0 5px 16px rgb(34 46 27 / 5%); animation: auth-feedback-in .22s cubic-bezier(.2,.7,.2,1) both; }
+.auth-feedback-icon { display: grid; width: 30px; height: 30px; flex: none; place-items: center; border-radius: 8px; color: #64834e; background: #eaf2e1; }
+.auth-feedback-copy { display: grid; gap: 2px; min-width: 0; }
+.auth-feedback-copy strong { color: #43513a; font-size: 9px; font-weight: 750; }
+.auth-feedback-copy > span { color: #737d6c; font-size: 9px; font-weight: 450; line-height: 1.45; }
+.auth-feedback-error { border-color: #f0ddd8; color: #805047; background: #fff9f7; }
+.auth-feedback-error .auth-feedback-icon { color: #b45745; background: #fbe9e4; }
+.auth-feedback-error .auth-feedback-copy strong { color: #914b3e; }
+.auth-feedback-error .auth-feedback-copy > span { color: #8e6259; }
+.auth-feedback-success { border-color: #dce9d2; background: #f7faf3; }
+@keyframes auth-feedback-in { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
 .auth-switch { margin: 16px 0 0; color: #858c7f; font-size: 8px; text-align: center; }
 .auth-switch button { margin-left: 3px; }
 .auth-back { display: block; margin: 15px auto 0; font-size: 9px; }

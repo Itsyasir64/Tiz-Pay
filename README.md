@@ -64,6 +64,7 @@ The frontend reads `VITE_API_URL` (default `http://localhost:8000`).
 - `POST /api/auth/signup` creates an account and private, empty wallet.
 - `POST /api/auth/login` returns a bearer access token.
 - `GET /api/auth/me` returns the signed-in account.
+- `PATCH /api/account` updates the signed-in account name, wallet display name, and currency.
 - `POST /api/auth/password-reset` requests a one-time email link.
 - `POST /api/auth/password-reset/confirm` consumes the link and changes the password.
 - `GET /api/overview`, `GET /api/transactions`, and `POST /api/transfers`

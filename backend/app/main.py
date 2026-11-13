@@ -43,6 +43,18 @@ class TransferRequest(BaseModel):
     amount_cents: int = Field(gt=0, le=10_000_000)
 
 
+class AccountUpdateRequest(BaseModel):
+    full_name: Annotated[
+        str | None,
+        StringConstraints(strip_whitespace=True, min_length=2, max_length=100),
+    ] = None
+    owner_name: Annotated[
+        str | None,
+        StringConstraints(strip_whitespace=True, min_length=2, max_length=100),
+    ] = None
+    currency: Annotated[str | None, StringConstraints(strip_whitespace=True)] = None
+
+
 def transaction_data(transaction: Transaction) -> dict[str, int | str | datetime]:
     return {
         "id": transaction.id,
@@ -176,3 +188,37 @@ def create_transfer(
     session.commit()
     session.refresh(transaction)
     return transaction_data(transaction)
+
+
+@app.patch("/api/account")
+def update_account(
+    request: AccountUpdateRequest,
+    user: Annotated[User, Depends(get_current_user)],
+    session: Session = Depends(get_db),
+):
+    wallet = session.scalar(select(Wallet).where(Wallet.user_id == user.id))
+    if wallet is None:
+        raise HTTPException(status_code=404, detail="Wallet was not found")
+
+    payload = request.model_dump(exclude_none=True)
+    if not payload:
+        raise HTTPException(status_code=400, detail="No account fields to update")
+
+    if "full_name" in payload:
+        user.full_name = payload["full_name"].strip()
+    if "owner_name" in payload:
+        wallet.owner_name = payload["owner_name"].strip()
+    if "currency" in payload:
+        currency = payload["currency"].strip().upper()
+        if len(currency) != 3 or not currency.isalpha():
+            raise HTTPException(status_code=400, detail="Currency must be a 3-letter code")
+        wallet.currency = currency
+
+    session.commit()
+    return {
+        "id": user.id,
+        "email": user.email,
+        "full_name": user.full_name,
+        "owner_name": wallet.owner_name,
+        "currency": wallet.currency,
+    }

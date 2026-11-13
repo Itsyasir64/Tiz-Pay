@@ -3,7 +3,7 @@ import { createRoot } from 'react-dom/client'
 import {
   ArrowDownLeft, ArrowDownRight, ArrowLeftRight, ArrowRight, ArrowUpRight,
   AtSign, Bell, Bot, CalendarDays, ChevronDown, CircleDollarSign, Coffee, Copy,
-  CreditCard, Download, Ellipsis, Eye, EyeOff, FileText, Headphones, Home, Leaf, Mail,
+  CircleAlert, CreditCard, Download, Ellipsis, Eye, EyeOff, FileText, Headphones, Home, Leaf, Mail,
   KeyRound, LockKeyhole, MessageCircle, Search, Send, ShieldCheck, ShoppingBag, Snowflake, Sparkles,
   UserRound, X,
 } from 'lucide-react'
@@ -47,6 +47,7 @@ function App() {
     const resetToken = new URLSearchParams(window.location.search).get('reset_token')
     return resetToken ? 'reset' : 'login'
   })
+  const [authEmail, setAuthEmail] = useState('')
   const [authNotice, setAuthNotice] = useState('')
   const [authError, setAuthError] = useState(false)
   const [authSubmitting, setAuthSubmitting] = useState(false)
@@ -77,6 +78,10 @@ function App() {
   const [statementError, setStatementError] = useState('')
   const [statementDownloadStatus, setStatementDownloadStatus] = useState('')
   const [statementDownloading, setStatementDownloading] = useState(false)
+  const [profile, setProfile] = useState({ full_name: '', email: '' })
+  const [profileEditorOpen, setProfileEditorOpen] = useState(false)
+  const [profileDraft, setProfileDraft] = useState({ full_name: '', owner_name: '', currency: 'USD' })
+  const [profileSaving, setProfileSaving] = useState(false)
   const [chatOpen, setChatOpen] = useState(false)
   const [chatDraft, setChatDraft] = useState('')
   const [chatMessages, setChatMessages] = useState([
@@ -108,6 +113,8 @@ function App() {
     sessionStorage.removeItem('tizpay_access_token')
     setAccessToken('')
     setOverview(null)
+    setProfile({ full_name: '', email: '' })
+    setProfileEditorOpen(false)
     setExperience('auth')
     setAuthView('login')
     setAccountOpen(false)
@@ -141,6 +148,37 @@ function App() {
     setLoading(true)
     loadOverview()
   }, [accessToken])
+
+  async function loadAccountProfile() {
+    if (!accessToken) return
+    try {
+      const response = await apiFetch(`${API_URL}/api/auth/me`)
+      if (!response.ok) throw new Error('Could not load account details.')
+      const user = await response.json()
+      setProfile({ full_name: user.full_name || '', email: user.email || '' })
+      setProfileDraft((current) => ({
+        full_name: user.full_name || current.full_name || '',
+        owner_name: overview?.owner_name || current.owner_name || user.full_name || '',
+        currency: overview?.currency || current.currency || 'USD',
+      }))
+    } catch {
+      setProfile({ full_name: '', email: '' })
+    }
+  }
+
+  useEffect(() => {
+    if (!accessToken) return
+    loadAccountProfile()
+  }, [accessToken])
+
+  useEffect(() => {
+    if (!overview) return
+    setProfileDraft((current) => ({
+      full_name: profile.full_name || current.full_name || '',
+      owner_name: overview.owner_name || current.owner_name || '',
+      currency: overview.currency || current.currency || 'USD',
+    }))
+  }, [overview, profile.full_name])
 
   useEffect(() => {
     if (!statementOpen) return undefined
@@ -232,6 +270,55 @@ function App() {
     else totals.spending += transaction.amount_cents
     return totals
   }, { income: 0, spending: 0 })
+
+  async function saveProfile(event) {
+    event.preventDefault()
+    const fullName = profileDraft.full_name.trim()
+    const ownerNameValue = profileDraft.owner_name.trim()
+    const currencyValue = profileDraft.currency.trim().toUpperCase()
+    if (!fullName || !ownerNameValue || !currencyValue) {
+      setNotice('Please complete your profile before saving.')
+      return
+    }
+    if (currencyValue.length !== 3 || !/^[A-Z]+$/.test(currencyValue)) {
+      setNotice('Currency codes must be exactly 3 letters, like USD or EUR.')
+      return
+    }
+
+    setProfileSaving(true)
+    setNotice('')
+    try {
+      const response = await apiFetch(`${API_URL}/api/account`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          full_name: fullName,
+          owner_name: ownerNameValue,
+          currency: currencyValue,
+        }),
+      })
+      const result = await response.json()
+      if (!response.ok) throw new Error(result.detail || 'Profile could not be updated.')
+      setProfile({ full_name: result.full_name, email: result.email })
+      setOverview((current) => current ? {
+        ...current,
+        owner_name: result.owner_name,
+        email: result.email,
+        currency: result.currency,
+      } : current)
+      setProfileDraft({
+        full_name: result.full_name,
+        owner_name: result.owner_name,
+        currency: result.currency,
+      })
+      setProfileEditorOpen(false)
+      setNotice('Profile updated successfully.')
+    } catch (err) {
+      setNotice(err.message || 'Could not update your profile.')
+    } finally {
+      setProfileSaving(false)
+    }
+  }
 
   async function downloadStatementPdf() {
     setStatementDownloading(true)
@@ -349,7 +436,30 @@ function App() {
 
   async function handleAuthSubmit(event) {
     event.preventDefault()
-    const form = new FormData(event.currentTarget)
+    const formElement = event.currentTarget
+    const form = new FormData(formElement)
+    const invalidInput = Array.from(formElement.elements).find(
+      (element) => element.required && !element.validity.valid,
+    )
+    if (invalidInput) {
+      const fieldName = invalidInput.name === 'name' ? 'your full name'
+        : invalidInput.name === 'email' ? 'your email address'
+          : 'your password'
+      const message = invalidInput.validity.valueMissing
+        ? `Please enter ${fieldName}.`
+        : invalidInput.validity.typeMismatch
+          ? 'Enter a valid email address.'
+          : invalidInput.validity.tooShort
+            ? invalidInput.name === 'name'
+              ? 'Your name must be at least 2 characters.'
+              : 'Your password must be at least 8 characters.'
+            : 'Please check this field and try again.'
+      setAuthError(true)
+      setAuthNotice(message)
+      invalidInput.focus()
+      return
+    }
+
     const email = String(form.get('email') || '').trim()
     setAuthNotice('')
     setAuthError(false)
@@ -400,14 +510,21 @@ function App() {
       const result = await response.json()
       if (!response.ok) throw new Error(result.detail || 'Could not sign in.')
 
+      if (signup) {
+        setAuthEmail(email)
+        setAuthView('login')
+        setAuthNotice(result.message || 'Account created successfully. Please sign in.')
+        return
+      }
+
       localStorage.removeItem('tizpay_access_token')
       sessionStorage.removeItem('tizpay_access_token')
-      const storage = !signup && form.get('remember') === 'on' ? localStorage : sessionStorage
+      const storage = form.get('remember') === 'on' ? localStorage : sessionStorage
       storage.setItem('tizpay_access_token', result.access_token)
       setOverview(null)
       setAccessToken(result.access_token)
       setExperience('dashboard')
-      setNotice(signup ? 'Your account is ready.' : 'Signed in successfully.')
+      setNotice('Signed in successfully.')
     } catch (err) {
       setAuthError(true)
       setAuthNotice(err.message || 'Could not reach the authentication service.')
@@ -453,12 +570,15 @@ function App() {
             <h2 id="auth-title">{authView === 'forgot' ? 'Reset your password' : authView === 'reset' ? 'Choose a new password' : authView === 'signup' ? 'Create your account' : 'Good to see you.'}</h2>
             <p>{authView === 'forgot' ? 'Enter your email and we’ll send a one-time reset link if email delivery is configured.' : authView === 'reset' ? 'Choose a new password for your TizPay account.' : authView === 'signup' ? 'A clearer view of your money starts here.' : 'Sign in to your personal money space.'}</p>
           </div>
-          <form className="auth-form" onSubmit={handleAuthSubmit}>
+          <form className="auth-form" noValidate onInput={() => { if (authError) { setAuthError(false); setAuthNotice('') } }} onSubmit={handleAuthSubmit}>
             {authView === 'signup' && <label>Full name<span className="auth-input"><UserRound size={16} /><input autoComplete="name" name="name" placeholder="Your full name" minLength="2" required /></span></label>}
-            {authView !== 'reset' && <label>Email address<span className="auth-input"><Mail size={16} /><input autoComplete="email" name="email" type="email" placeholder="you@example.com" required /></span></label>}
+            {authView !== 'reset' && <label>Email address<span className="auth-input"><Mail size={16} /><input autoComplete="email" name="email" type="email" placeholder="you@example.com" value={authEmail} onChange={(event) => setAuthEmail(event.target.value)} required /></span></label>}
             {authView !== 'forgot' && <label>{authView === 'reset' ? 'New password' : 'Password'}<span className="auth-input"><LockKeyhole size={16} /><input autoComplete={authView === 'login' ? 'current-password' : 'new-password'} name="password" type="password" placeholder="At least 8 characters" minLength={authView === 'login' ? undefined : 8} maxLength="128" required /></span></label>}
             {authView === 'login' && <div className="auth-form-options"><label className="auth-remember"><input type="checkbox" name="remember" /> <span>Remember me</span></label><button type="button" onClick={() => { setAuthView('forgot'); setAuthNotice('') }}>Forgot password?</button></div>}
-            {authNotice && <p className={`auth-feedback ${authError ? 'auth-feedback-error' : ''}`} role="status">{authNotice}</p>}
+            {authNotice && <div className={`auth-feedback ${authError ? 'auth-feedback-error' : 'auth-feedback-success'}`} role={authError ? 'alert' : 'status'}>
+              <span className="auth-feedback-icon">{authError ? <CircleAlert size={17} /> : <ShieldCheck size={17} />}</span>
+              <span className="auth-feedback-copy"><strong>{authError ? 'Let’s fix that' : 'You’re all set'}</strong><span>{authNotice}</span></span>
+            </div>}
             <button className="auth-submit" type="submit" disabled={authSubmitting}>{authSubmitting ? 'Please wait…' : authView === 'forgot' ? 'Send reset instructions' : authView === 'reset' ? 'Update password' : authView === 'signup' ? 'Create account' : 'Sign in'} <ArrowRight size={17} /></button>
           </form>
           {authView === 'forgot' || authView === 'reset' ? <button className="auth-back" type="button" onClick={() => { setAuthView('login'); setAuthNotice(''); setAuthError(false) }}>Back to sign in</button>
@@ -611,11 +731,21 @@ function App() {
           <div className="account-modal-top"><div><div className="eyebrow">YOUR PROFILE</div><h2 id="account-title">Personal account</h2></div><button className="icon-button" title="Close" onClick={() => setAccountOpen(false)}><X size={19} /></button></div>
           <div className="account-identity"><span className="account-avatar">{initials}</span><div><strong>{ownerName}</strong><span>Personal wallet · {currency}</span></div><ShieldCheck size={19} /></div>
           <div className="account-details">
-            <div className="account-detail"><span className="account-detail-icon"><CircleDollarSign size={16} /></span><div><small>Full name</small><strong>{ownerName}</strong></div></div>
-            <div className="account-detail"><span className="account-detail-icon"><Mail size={16} /></span><div><small>Email address</small><strong>{overview?.email || '—'}</strong></div></div>
+            <div className="account-detail"><span className="account-detail-icon"><CircleDollarSign size={16} /></span><div><small>Full name</small><strong>{profile.full_name || ownerName}</strong></div></div>
+            <div className="account-detail"><span className="account-detail-icon"><Mail size={16} /></span><div><small>Email address</small><strong>{profile.email || overview?.email || '—'}</strong></div></div>
             <div className="account-detail"><span className="account-detail-icon"><AtSign size={16} /></span><div><small>TizPay username</small><strong>{username}</strong></div></div>
             <div className="account-detail"><span className="account-detail-icon"><ShieldCheck size={16} /></span><div><small>Account type</small><strong>Personal account</strong></div></div>
           </div>
+          <button className="account-edit-button" type="button" onClick={() => setProfileEditorOpen((open) => !open)}>{profileEditorOpen ? 'Close editor' : 'Edit profile'}</button>
+          {profileEditorOpen && <form className="account-editor" onSubmit={saveProfile}>
+            <label className="profile-field"><span>Full name</span><input value={profileDraft.full_name} onChange={(event) => setProfileDraft((draft) => ({ ...draft, full_name: event.target.value }))} required /></label>
+            <label className="profile-field"><span>Wallet name</span><input value={profileDraft.owner_name} onChange={(event) => setProfileDraft((draft) => ({ ...draft, owner_name: event.target.value }))} required /></label>
+            <label className="profile-field"><span>Currency</span><input value={profileDraft.currency} maxLength={3} onChange={(event) => setProfileDraft((draft) => ({ ...draft, currency: event.target.value.toUpperCase() }))} required /></label>
+            <div className="profile-actions">
+              <button type="button" className="profile-cancel" onClick={() => setProfileEditorOpen(false)}>Cancel</button>
+              <button type="submit" className="profile-save" disabled={profileSaving}>{profileSaving ? 'Saving…' : 'Save changes'}</button>
+            </div>
+          </form>}
           <button className="account-done" onClick={() => setAccountOpen(false)}>Done</button>
           <button className="account-signout" onClick={signOut}>Sign out</button>
           <p className="account-demo-note">Your password is stored as a secure hash and can’t be viewed here.</p>
