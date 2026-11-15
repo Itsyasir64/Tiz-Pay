@@ -64,15 +64,17 @@ The frontend reads `VITE_API_URL` (default `http://localhost:8000`).
 - `POST /api/auth/signup` creates an account and private, empty wallet.
 - `POST /api/auth/login` returns a bearer access token.
 - `GET /api/auth/me` returns the signed-in account.
+- `POST /api/deposits` adds demo funds to the signed-in wallet.
 - `PATCH /api/account` updates the signed-in account name, wallet display name, and currency.
 - `POST /api/auth/password-reset` requests a one-time email link.
 - `POST /api/auth/password-reset/confirm` consumes the link and changes the password.
-- `GET /api/overview`, `GET /api/transactions`, and `POST /api/transfers`
-  require `Authorization: Bearer <access_token>` and operate only on that
-  account's wallet.
+- `GET /api/overview`, `GET /api/transactions`, `POST /api/transfers`, and
+  `POST /api/deposits` require `Authorization: Bearer <access_token>` and
+  operate only on that account's wallet.
 - `GET /health` is a lightweight liveness check.
 
 This is a local development demo, not a production payment system. Although
-accounts and API authentication are implemented, the app has no payment
-processor, HTTPS deployment guidance, or production-grade financial controls.
-Do not use it for real funds or sensitive data.
+accounts and API authentication are implemented, deposits only create
+simulated funds; the app has no payment processor, HTTPS deployment guidance,
+or production-grade financial controls. Do not use it for real funds or
+sensitive data.

@@ -61,6 +61,7 @@ function App() {
   const [range, setRange] = useState('30D')
   const [query, setQuery] = useState('')
   const [transferOpen, setTransferOpen] = useState(false)
+  const [depositOpen, setDepositOpen] = useState(false)
   const [receiveOpen, setReceiveOpen] = useState(false)
   const [accountOpen, setAccountOpen] = useState(false)
   const [cardsOpen, setCardsOpen] = useState(false)
@@ -88,6 +89,7 @@ function App() {
     { role: 'assistant', text: 'Hi Yasir! I’m TizChat. What can I help you with today?' },
   ])
   const [sending, setSending] = useState(false)
+  const [depositing, setDepositing] = useState(false)
   const [notice, setNotice] = useState('')
   const chatEndRef = useRef(null)
 
@@ -246,6 +248,34 @@ function App() {
       setNotice(err.message || 'Could not reach the payment service.')
     } finally {
       setSending(false)
+    }
+  }
+
+  async function addDeposit(event) {
+    event.preventDefault()
+    const form = new FormData(event.currentTarget)
+    const amount = Math.round(Number(form.get('amount')) * 100)
+    if (!Number.isSafeInteger(amount) || amount < 1 || amount > 10_000_000) {
+      setNotice('Enter an amount between $0.01 and $100,000.00.')
+      return
+    }
+    setDepositing(true)
+    setNotice('')
+    try {
+      const response = await apiFetch(`${API_URL}/api/deposits`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ amount_cents: amount }),
+      })
+      const result = await response.json()
+      if (!response.ok) throw new Error(result.detail || 'Money could not be added.')
+      setDepositOpen(false)
+      setNotice(`Added ${money(amount, currency)} to your wallet. This is demo money only.`)
+      await loadOverview()
+    } catch (err) {
+      setNotice(err.message || 'Could not reach the payment service.')
+    } finally {
+      setDepositing(false)
     }
   }
 
@@ -629,6 +659,7 @@ function App() {
         <header className="topbar">
           <div className="breadcrumb"><span>Workspace</span><span className="crumb-slash">/</span><strong>Overview</strong></div>
           <div className="top-actions">
+            <button className="header-action header-deposit" aria-label="Add money" onClick={() => setDepositOpen(true)}><CircleDollarSign size={14} /><span>Add money</span></button>
             <button className="header-action header-send" aria-label="Send money" onClick={() => setTransferOpen(true)}><Send size={14} /><span>Send money</span></button>
             <button className="header-action header-receive" aria-label="Receive money" onClick={() => setReceiveOpen(true)}><ArrowDownLeft size={15} /><span>Receive money</span></button>
             <span className="secure-label"><ShieldCheck size={14} /> Secure space</span>
@@ -715,6 +746,17 @@ function App() {
             <label className="form-label amount-label" htmlFor="amount">Amount</label><div className="amount-input-wrap"><span>$</span><input className="amount-input" id="amount" name="amount" type="number" inputMode="decimal" min="0.01" step="0.01" placeholder="0.00" required /></div>
             <div className="available-note">Available balance <strong>{money(overview?.balance_cents || 0, currency)}</strong></div>
             <button className="modal-submit" type="submit" disabled={sending}>{sending ? 'Sending…' : 'Review transfer'} <ArrowRight size={16} /></button>
+          </form>
+        </section>
+      </div>}
+      {depositOpen && <div className="modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setDepositOpen(false) }}>
+        <section className="transfer-modal" role="dialog" aria-modal="true" aria-labelledby="deposit-title">
+          <div className="modal-top"><div className="modal-icon"><CircleDollarSign size={19} /></div><button className="icon-button" title="Close" onClick={() => setDepositOpen(false)}><X size={19} /></button></div>
+          <div className="eyebrow">WALLET TOP-UP</div><h2 id="deposit-title">Add money</h2><p className="modal-description">Add demo funds to your wallet to try sending money. No real payment is processed.</p>
+          <form onSubmit={addDeposit}>
+            <label className="form-label amount-label" htmlFor="deposit-amount">Amount</label><div className="amount-input-wrap"><span>$</span><input className="amount-input" id="deposit-amount" name="amount" type="number" inputMode="decimal" min="0.01" max="100000" step="0.01" placeholder="0.00" required /></div>
+            <div className="available-note"><span>Current balance</span><strong>{money(overview?.balance_cents || 0, currency)}</strong></div>
+            <button className="modal-submit" type="submit" disabled={depositing}>{depositing ? 'Adding money…' : 'Add demo funds'} <ArrowRight size={16} /></button>
           </form>
         </section>
       </div>}

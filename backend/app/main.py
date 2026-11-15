@@ -43,6 +43,10 @@ class TransferRequest(BaseModel):
     amount_cents: int = Field(gt=0, le=10_000_000)
 
 
+class DepositRequest(BaseModel):
+    amount_cents: int = Field(gt=0, le=10_000_000)
+
+
 class AccountUpdateRequest(BaseModel):
     full_name: Annotated[
         str | None,
@@ -182,6 +186,33 @@ def create_transfer(
         category="Transfer",
         amount_cents=request.amount_cents,
         direction="out",
+        created_at=datetime.now(timezone.utc),
+    )
+    session.add(transaction)
+    session.commit()
+    session.refresh(transaction)
+    return transaction_data(transaction)
+
+
+@app.post("/api/deposits", status_code=201)
+def create_deposit(
+    request: DepositRequest,
+    user: Annotated[User, Depends(get_current_user)],
+    session: Session = Depends(get_db),
+):
+    wallet = session.scalar(
+        select(Wallet).where(Wallet.user_id == user.id).with_for_update()
+    )
+    if wallet is None:
+        raise HTTPException(status_code=404, detail="Wallet was not found")
+
+    wallet.balance_cents += request.amount_cents
+    transaction = Transaction(
+        wallet_id=wallet.id,
+        title="Wallet top-up",
+        category="Deposit",
+        amount_cents=request.amount_cents,
+        direction="in",
         created_at=datetime.now(timezone.utc),
     )
     session.add(transaction)
