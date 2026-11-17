@@ -28,11 +28,22 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/auth", tags=["authentication"])
 bearer_scheme = HTTPBearer(auto_error=False)
 password_hash = PasswordHash.recommended()
-dummy_password_hash = password_hash.hash("not-a-real-user-password")
 
-JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY", "")
-if len(JWT_SECRET_KEY) < 32:
-    raise RuntimeError("JWT_SECRET_KEY must be at least 32 characters long")
+
+def _resolve_jwt_secret_key() -> str:
+    secret = os.getenv("JWT_SECRET_KEY", "").strip()
+    if len(secret) < 32:
+        secret = secrets.token_urlsafe(32)
+        os.environ["JWT_SECRET_KEY"] = secret
+        logger.warning(
+            "JWT_SECRET_KEY was missing or too short; generated a temporary secret for this process. "
+            "Set a stable value in the environment to keep existing tokens valid across restarts."
+        )
+    return secret
+
+
+JWT_SECRET_KEY = _resolve_jwt_secret_key()
+JWT_ALGORITHM = "HS256"
 
 ACCESS_TOKEN_MINUTES = 60
 REMEMBERED_TOKEN_DAYS = 30
@@ -75,6 +86,10 @@ class TokenResponse(BaseModel):
     user: UserResponse
 
 
+class SignupResponse(BaseModel):
+    message: str
+
+
 def _normalized_email(email: EmailStr) -> str:
     return str(email).strip().lower()
 
@@ -89,11 +104,17 @@ def _create_access_token(user: User, remember_me: bool = False) -> str:
         if remember_me
         else timedelta(minutes=ACCESS_TOKEN_MINUTES)
     )
-    expires_at = datetime.now(timezone.utc) + lifetime
+    now = datetime.now(timezone.utc)
+    expires_at = now + lifetime
     return jwt.encode(
-        {"sub": str(user.id), "ver": user.auth_version, "exp": expires_at},
+        {
+            "sub": str(user.id),
+            "ver": user.auth_version,
+            "iat": int(now.timestamp()),
+            "exp": int(expires_at.timestamp()),
+        },
         JWT_SECRET_KEY,
-        algorithm="HS256",
+        algorithm=JWT_ALGORITHM,
     )
 
 
@@ -166,7 +187,10 @@ def get_current_user(
 
     try:
         payload = jwt.decode(
-            credentials.credentials, JWT_SECRET_KEY, algorithms=["HS256"]
+            credentials.credentials,
+            JWT_SECRET_KEY,
+            algorithms=[JWT_ALGORITHM],
+            options={"require": ["sub", "ver", "exp"]},
         )
         user_id = int(payload["sub"])
         auth_version = int(payload["ver"])
@@ -179,7 +203,7 @@ def get_current_user(
     return user
 
 
-@router.post("/signup", response_model=TokenResponse, status_code=201)
+@router.post("/signup", response_model=SignupResponse, status_code=201)
 def signup(request: SignupRequest, session: Annotated[Session, Depends(get_db)]):
     user = User(
         email=_normalized_email(request.email),
@@ -199,7 +223,9 @@ def signup(request: SignupRequest, session: Annotated[Session, Depends(get_db)])
             detail="An account with this email already exists.",
         ) from None
 
-    return TokenResponse(access_token=_create_access_token(user), user=_user_response(user))
+    return SignupResponse(
+        message="Account created successfully. Please sign in."
+    )
 
 
 @router.post("/login", response_model=TokenResponse)
@@ -207,8 +233,14 @@ def login(request: LoginRequest, session: Annotated[Session, Depends(get_db)]):
     user = session.scalar(
         select(User).where(User.email == _normalized_email(request.email))
     )
-    hashed_password = user.password_hash if user is not None else dummy_password_hash
-    if not password_hash.verify(request.password, hashed_password) or user is None:
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid email or password.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    if not password_hash.verify(request.password, user.password_hash):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid email or password.",
@@ -235,6 +267,16 @@ def request_password_reset(
         select(User).where(User.email == _normalized_email(request.email))
     )
     if user is not None:
+        expired_tokens = session.scalars(
+            select(PasswordResetToken).where(
+                PasswordResetToken.user_id == user.id,
+                PasswordResetToken.used_at.is_(None),
+                PasswordResetToken.expires_at > datetime.now(timezone.utc),
+            )
+        ).all()
+        for reset_record in expired_tokens:
+            reset_record.used_at = datetime.now(timezone.utc)
+
         token = secrets.token_urlsafe(32)
         reset_record = PasswordResetToken(
             user_id=user.id,
@@ -243,9 +285,16 @@ def request_password_reset(
             + timedelta(minutes=RESET_TOKEN_MINUTES),
         )
         session.add(reset_record)
-        session.flush()
-        _send_password_reset_email(user.email, token)
-        session.commit()
+        try:
+            session.flush()
+            _send_password_reset_email(user.email, token)
+            session.commit()
+        except HTTPException:
+            session.rollback()
+            raise
+        except Exception:
+            session.rollback()
+            raise
 
     return {
         "message": "If an account exists for that email, password reset instructions have been sent."
