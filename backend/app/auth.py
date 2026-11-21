@@ -6,13 +6,15 @@ import os
 import secrets
 import smtplib
 import ssl
+import threading
+import time
 from datetime import datetime, timedelta, timezone
 from email.message import EmailMessage
 from typing import Annotated, Literal
 from urllib.parse import urlencode
 
 import jwt
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, EmailStr, StringConstraints
 from pwdlib import PasswordHash
@@ -33,6 +35,10 @@ password_hash = PasswordHash.recommended()
 def _resolve_jwt_secret_key() -> str:
     secret = os.getenv("JWT_SECRET_KEY", "").strip()
     if len(secret) < 32:
+        if os.getenv("APP_ENV", "").lower() == "production":
+            raise RuntimeError(
+                "JWT_SECRET_KEY must be set to at least 32 characters in production"
+            )
         secret = secrets.token_urlsafe(32)
         os.environ["JWT_SECRET_KEY"] = secret
         logger.warning(
@@ -44,11 +50,64 @@ def _resolve_jwt_secret_key() -> str:
 
 JWT_SECRET_KEY = _resolve_jwt_secret_key()
 JWT_ALGORITHM = "HS256"
+JWT_ISSUER = "tizpay-api"
+JWT_AUDIENCE = "tizpay-web"
 
 ACCESS_TOKEN_MINUTES = 60
 REMEMBERED_TOKEN_DAYS = 30
 RESET_TOKEN_MINUTES = 30
 FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:5173").rstrip("/")
+
+
+class InMemoryRateLimiter:
+    def __init__(self) -> None:
+        self._attempts: dict[str, list[float]] = {}
+        self._lock = threading.Lock()
+
+    def is_limited(self, key: str, limit: int, window_seconds: int) -> bool:
+        now = time.monotonic()
+        cutoff = now - window_seconds
+        with self._lock:
+            recent = [attempt for attempt in self._attempts.get(key, []) if attempt > cutoff]
+            if len(recent) >= limit:
+                self._attempts[key] = recent
+                return True
+            recent.append(now)
+            self._attempts[key] = recent
+            return False
+
+
+rate_limiter = InMemoryRateLimiter()
+
+
+def _client_key(request: Request) -> str:
+    forwarded = request.headers.get("x-forwarded-for")
+    if forwarded:
+        return forwarded.split(",", 1)[0].strip()
+    return request.client.host if request.client else "unknown"
+
+
+def _validate_password(password: str) -> None:
+    if len(password) < 8:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Password must be at least 8 characters.",
+        )
+    if not any(character.islower() for character in password):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Password must contain at least one lowercase letter.",
+        )
+    if not any(character.isupper() for character in password):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Password must contain at least one uppercase letter.",
+        )
+    if not any(character.isdigit() for character in password):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Password must contain at least one number.",
+        )
 
 
 class SignupRequest(BaseModel):
@@ -110,6 +169,8 @@ def _create_access_token(user: User, remember_me: bool = False) -> str:
         {
             "sub": str(user.id),
             "ver": user.auth_version,
+            "iss": JWT_ISSUER,
+            "aud": JWT_AUDIENCE,
             "iat": int(now.timestamp()),
             "exp": int(expires_at.timestamp()),
         },
@@ -190,6 +251,8 @@ def get_current_user(
             credentials.credentials,
             JWT_SECRET_KEY,
             algorithms=[JWT_ALGORITHM],
+            issuer=JWT_ISSUER,
+            audience=JWT_AUDIENCE,
             options={"require": ["sub", "ver", "exp"]},
         )
         user_id = int(payload["sub"])
@@ -204,7 +267,17 @@ def get_current_user(
 
 
 @router.post("/signup", response_model=SignupResponse, status_code=201)
-def signup(request: SignupRequest, session: Annotated[Session, Depends(get_db)]):
+def signup(
+    request: SignupRequest,
+    http_request: Request,
+    session: Annotated[Session, Depends(get_db)],
+):
+    if rate_limiter.is_limited(f"signup:{_client_key(http_request)}", 10, 3600):
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Too many signup attempts. Please try again later.",
+        )
+    _validate_password(request.password)
     user = User(
         email=_normalized_email(request.email),
         full_name=request.full_name,
@@ -229,9 +302,23 @@ def signup(request: SignupRequest, session: Annotated[Session, Depends(get_db)])
 
 
 @router.post("/login", response_model=TokenResponse)
-def login(request: LoginRequest, session: Annotated[Session, Depends(get_db)]):
+def login(
+    request: LoginRequest,
+    http_request: Request,
+    session: Annotated[Session, Depends(get_db)],
+):
+    client_key = _client_key(http_request)
+    email_key = _normalized_email(request.email)
+    if rate_limiter.is_limited(f"login-ip:{client_key}", 20, 900) or rate_limiter.is_limited(
+        f"login-email:{email_key}", 10, 900
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Too many login attempts. Please try again later.",
+        )
+
     user = session.scalar(
-        select(User).where(User.email == _normalized_email(request.email))
+        select(User).where(User.email == email_key)
     )
     if user is None:
         raise HTTPException(
@@ -260,8 +347,19 @@ def current_account(user: Annotated[User, Depends(get_current_user)]):
 
 @router.post("/password-reset", status_code=202)
 def request_password_reset(
-    request: PasswordResetRequest, session: Annotated[Session, Depends(get_db)]
+    request: PasswordResetRequest,
+    http_request: Request,
+    session: Annotated[Session, Depends(get_db)],
 ):
+    if rate_limiter.is_limited(
+        f"reset-ip:{_client_key(http_request)}", 5, 3600
+    ) or rate_limiter.is_limited(
+        f"reset-email:{_normalized_email(request.email)}", 3, 3600
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Too many password reset requests. Please try again later.",
+        )
     _smtp_settings()
     user = session.scalar(
         select(User).where(User.email == _normalized_email(request.email))
@@ -305,6 +403,7 @@ def request_password_reset(
 def confirm_password_reset(
     request: PasswordResetConfirm, session: Annotated[Session, Depends(get_db)]
 ):
+    _validate_password(request.new_password)
     reset_record = session.scalar(
         select(PasswordResetToken).where(
             PasswordResetToken.token_hash == _token_digest(request.token),

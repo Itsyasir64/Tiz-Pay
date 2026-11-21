@@ -21,6 +21,12 @@ $env:JWT_SECRET_KEY = (python -c "import secrets; print(secrets.token_urlsafe(32
 "JWT_SECRET_KEY=$env:JWT_SECRET_KEY" | Set-Content -Encoding ascii .env
 ```
 
+Also set a separate database password in `.env`:
+
+```powershell
+"POSTGRES_PASSWORD=$([guid]::NewGuid().ToString('N'))" | Add-Content -Encoding ascii .env
+```
+
 ```powershell
 docker compose up --build
 ```

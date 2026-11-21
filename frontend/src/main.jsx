@@ -36,9 +36,7 @@ function displayDate(value) {
 }
 
 function storedAccessToken() {
-  return localStorage.getItem('tizpay_access_token')
-    || sessionStorage.getItem('tizpay_access_token')
-    || ''
+  return sessionStorage.getItem('tizpay_access_token') || ''
 }
 
 function App() {
@@ -110,8 +108,14 @@ function App() {
     return () => window.clearTimeout(timer)
   }, [accessToken])
 
+  useEffect(() => {
+    if (!resetToken) return
+    const url = new URL(window.location.href)
+    url.searchParams.delete('reset_token')
+    window.history.replaceState(null, '', `${url.pathname}${url.search}${url.hash}`)
+  }, [])
+
   function signOut() {
-    localStorage.removeItem('tizpay_access_token')
     sessionStorage.removeItem('tizpay_access_token')
     setAccessToken('')
     setOverview(null)
@@ -547,10 +551,8 @@ function App() {
         return
       }
 
-      localStorage.removeItem('tizpay_access_token')
       sessionStorage.removeItem('tizpay_access_token')
-      const storage = form.get('remember') === 'on' ? localStorage : sessionStorage
-      storage.setItem('tizpay_access_token', result.access_token)
+      sessionStorage.setItem('tizpay_access_token', result.access_token)
       setOverview(null)
       setAccessToken(result.access_token)
       setExperience('dashboard')
@@ -603,8 +605,8 @@ function App() {
           <form className="auth-form" noValidate onInput={() => { if (authError) { setAuthError(false); setAuthNotice('') } }} onSubmit={handleAuthSubmit}>
             {authView === 'signup' && <label>Full name<span className="auth-input"><UserRound size={16} /><input autoComplete="name" name="name" placeholder="Your full name" minLength="2" required /></span></label>}
             {authView !== 'reset' && <label>Email address<span className="auth-input"><Mail size={16} /><input autoComplete="email" name="email" type="email" placeholder="you@example.com" value={authEmail} onChange={(event) => setAuthEmail(event.target.value)} required /></span></label>}
-            {authView !== 'forgot' && <label>{authView === 'reset' ? 'New password' : 'Password'}<span className="auth-input"><LockKeyhole size={16} /><input autoComplete={authView === 'login' ? 'current-password' : 'new-password'} name="password" type="password" placeholder="At least 8 characters" minLength={authView === 'login' ? undefined : 8} maxLength="128" required /></span></label>}
-            {authView === 'login' && <div className="auth-form-options"><label className="auth-remember"><input type="checkbox" name="remember" /> <span>Remember me</span></label><button type="button" onClick={() => { setAuthView('forgot'); setAuthNotice('') }}>Forgot password?</button></div>}
+            {authView !== 'forgot' && <label>{authView === 'reset' ? 'New password' : 'Password'}<span className="auth-input"><LockKeyhole size={16} /><input autoComplete={authView === 'login' ? 'current-password' : 'new-password'} name="password" type="password" placeholder={authView === 'login' ? 'Your password' : 'Uppercase, lowercase, and number'} pattern={authView === 'login' ? undefined : '(?=.*[a-z])(?=.*[A-Z])(?=.*\\d).{8,128}'} minLength={authView === 'login' ? undefined : 8} maxLength="128" required /></span></label>}
+            {authView === 'login' && <div className="auth-form-options"><button type="button" onClick={() => { setAuthView('forgot'); setAuthNotice('') }}>Forgot password?</button></div>}
             {authNotice && <div className={`auth-feedback ${authError ? 'auth-feedback-error' : 'auth-feedback-success'}`} role={authError ? 'alert' : 'status'}>
               <span className="auth-feedback-icon">{authError ? <CircleAlert size={17} /> : <ShieldCheck size={17} />}</span>
               <span className="auth-feedback-copy"><strong>{authError ? 'Let’s fix that' : 'You’re all set'}</strong><span>{authNotice}</span></span>
