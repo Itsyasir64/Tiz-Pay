@@ -618,6 +618,35 @@ function App() {
           <p className="auth-demo-note">Passwords are stored as secure hashes. Wallet data is available only after signing in.</p>
         </section>
       </div>
+      <section className="auth-feature-section" aria-labelledby="auth-feature-title">
+        <div className="auth-feature-inner">
+          <p className="auth-eyebrow">EVERYDAY MONEY, MADE CLEAR</p>
+          <h2 id="auth-feature-title">A clearer view of your money.</h2>
+          <p className="auth-feature-lead">Explore a personal wallet dashboard to follow balances and activity, review spending, and try demo transfers. TizPay is a demo: it does not process real payments.</p>
+          <div className="auth-feature-grid">
+            <article className="auth-feature-card">
+              <span className="auth-feature-icon"><CircleDollarSign size={18} /></span>
+              <h3>Your wallet at a glance</h3>
+              <p>Check your available balance and see money in and out in one place.</p>
+            </article>
+            <article className="auth-feature-card">
+              <span className="auth-feature-icon"><ArrowLeftRight size={18} /></span>
+              <h3>Activity made easier</h3>
+              <p>Browse recent transactions, search activity, and download a statement.</p>
+            </article>
+            <article className="auth-feature-card">
+              <span className="auth-feature-icon"><FileText size={18} /></span>
+              <h3>Spending in view</h3>
+              <p>Review your spending summary and keep everyday money organized.</p>
+            </article>
+            <article className="auth-feature-card">
+              <span className="auth-feature-icon"><ShieldCheck size={18} /></span>
+              <h3>Try it with demo funds</h3>
+              <p>Explore wallet actions with simulated funds—no real transfers or payments.</p>
+            </article>
+          </div>
+        </div>
+      </section>
       <footer className="auth-footer"><span>© 2025 TizPay</span><span>Built for everyday clarity</span></footer>
     </main> : (
     <div className="app-shell">

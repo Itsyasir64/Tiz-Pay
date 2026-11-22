@@ -474,7 +474,7 @@ h1 { margin: 10px 0 5px; color: #252922; font-size: 26px; font-weight: 600; lett
 @keyframes splash-glow { 0%, 100% { opacity: .12; transform: scale(.9); } 50% { opacity: .26; transform: scale(1.08); } }
 @keyframes orbit-rotate { to { transform: rotate(360deg); } }
 @keyframes orbit-core { 50% { transform: scale(1.06); box-shadow: 0 0 55px rgb(201 247 101 / 38%); } }
-.auth-page { position: relative; display: flex; min-height: 100vh; min-height: 100dvh; flex-direction: column; overflow: hidden; color: #252c22; background: radial-gradient(ellipse at 10% 56%, rgb(214 231 194 / 38%), transparent 35%), #f5f6f2; animation: auth-screen-in .75s cubic-bezier(.2,.7,.2,1) both; }
+.auth-page { position: relative; display: flex; min-height: 100vh; min-height: 100dvh; flex-direction: column; overflow-x: hidden; overflow-y: auto; color: #252c22; background: radial-gradient(ellipse at 10% 56%, rgb(214 231 194 / 38%), transparent 35%), #f5f6f2; animation: auth-screen-in .75s cubic-bezier(.2,.7,.2,1) both; }
 .auth-page::before { position: absolute; top: 70px; right: 0; bottom: 0; left: 0; background-image: radial-gradient(#dfe5d8 0.7px, transparent 0.7px); background-size: 20px 20px; mask-image: linear-gradient(90deg, #000, transparent 74%); opacity: .35; pointer-events: none; content: ''; }
 .auth-nav, .auth-footer { position: relative; z-index: 1; display: flex; width: min(1160px, calc(100% - 64px)); align-items: center; justify-content: space-between; margin: 0 auto; }
 .auth-nav { min-height: 80px; border-bottom: 1px solid rgb(45 58 39 / 9%); }
@@ -484,6 +484,16 @@ h1 { margin: 10px 0 5px; color: #252922; font-size: 26px; font-weight: 600; lett
 .auth-nav-trust { display: flex; align-items: center; gap: 7px; color: #737d6d; font-size: 10px; }
 .auth-nav-trust svg { color: #648b52; }
 .auth-layout { position: relative; z-index: 1; display: grid; width: min(1010px, calc(100% - 64px)); flex: 1; grid-template-columns: minmax(0, 1fr) minmax(340px, 435px); align-items: center; gap: clamp(44px, 8vw, 110px); margin: 0 auto; padding: 40px 0; }
+.auth-feature-section { position: relative; z-index: 1; width: min(1160px, calc(100% - 64px)); margin: 0 auto; padding: 55px 0 65px; border-top: 1px solid rgb(45 58 39 / 9%); text-align: center; }
+.auth-feature-inner { max-width: 1030px; margin: 0 auto; }
+.auth-feature-section > .auth-feature-inner > .auth-eyebrow { color: #71865e; }
+.auth-feature-section h2 { margin: 10px 0 8px; color: #30382c; font-size: clamp(25px, 3.2vw, 36px); font-weight: 500; letter-spacing: -1.2px; }
+.auth-feature-lead { max-width: 690px; margin: 0 auto; color: #798174; font-size: 11px; line-height: 1.8; }
+.auth-feature-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; margin-top: 35px; text-align: left; }
+.auth-feature-card { min-width: 0; padding: 18px 16px; border: 1px solid rgb(218 227 208 / 82%); border-radius: 9px; background: rgb(255 255 255 / 54%); }
+.auth-feature-icon { display: grid; width: 34px; height: 34px; place-items: center; border-radius: 9px; color: #5e7946; background: #edf4e5; }
+.auth-feature-card h3 { margin: 15px 0 6px; color: #45523c; font-size: 11px; font-weight: 700; }
+.auth-feature-card p { margin: 0; color: #828b79; font-size: 9px; line-height: 1.65; }
 .auth-intro { position: relative; max-width: 470px; padding: 20px 0 28px; animation: auth-in .6s .06s both; }
 .auth-intro-orb { position: relative; display: grid; width: 93px; height: 93px; margin-bottom: 28px; place-items: center; border: 1px solid #dfe7d5; border-radius: 50%; background: rgb(255 255 255 / 46%); }
 .auth-intro-orb::before, .auth-intro-orb::after { position: absolute; inset: 9px; border: 1px solid #e4ebdc; border-radius: inherit; content: ''; }
@@ -562,6 +572,9 @@ h1 { margin: 10px 0 5px; color: #252922; font-size: 26px; font-weight: 600; lett
   .auth-nav, .auth-footer { width: calc(100% - 36px); }
   .auth-nav { min-height: 65px; }
   .auth-layout { width: min(520px, calc(100% - 36px)); grid-template-columns: 1fr; gap: 24px; padding: 30px 0 25px; }
+  .auth-feature-section { width: calc(100% - 36px); padding: 38px 0 45px; }
+  .auth-feature-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-top: 25px; }
+  .auth-feature-card { padding: 15px 13px; }
   .auth-intro { padding: 3px 0 0; }
   .auth-intro-orb { float: right; width: 65px; height: 65px; margin: 0 0 10px 12px; }
   .auth-intro-orb > span { width: 35px; height: 35px; border-radius: 11px; }
@@ -578,6 +591,11 @@ h1 { margin: 10px 0 5px; color: #252922; font-size: 26px; font-weight: 600; lett
   .auth-nav, .auth-footer { width: calc(100% - 28px); }
   .auth-nav-trust { font-size: 8px; }
   .auth-layout { width: calc(100% - 28px); gap: 18px; padding-top: 22px; }
+  .auth-feature-section { width: calc(100% - 28px); padding: 30px 0 38px; }
+  .auth-feature-grid { grid-template-columns: 1fr; gap: 8px; }
+  .auth-feature-card { display: grid; grid-template-columns: 34px minmax(0, 1fr); column-gap: 11px; padding: 12px; }
+  .auth-feature-icon { grid-row: span 2; }
+  .auth-feature-card h3 { margin: 1px 0 4px; }
   .auth-card { padding: 18px; }
   .auth-card-heading h2 { font-size: 19px; }
   .splash-footer { right: 16px; bottom: 16px; left: 16px; font-size: 7px; }
