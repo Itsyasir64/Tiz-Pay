@@ -569,8 +569,8 @@ function App() {
     experience === 'splash' ? <main className="tiz-splash" aria-label="TizPay loading screen">
       <div className="splash-glow splash-glow-one" /><div className="splash-glow splash-glow-two" />
       <div className="splash-content">
-        <div className="splash-logo"><span className="splash-mark"><CircleDollarSign size={27} strokeWidth={2.2} /></span><span>tiz<span>pay</span></span></div>
-        <div className="splash-orbit" aria-hidden="true"><span className="splash-orbit-core"><CircleDollarSign size={42} /></span><i /><i /><i /></div>
+        <div className="splash-logo"><img src="/tizpay-logo.png" alt="TizPay" /></div>
+        <div className="splash-orbit" aria-hidden="true"><span className="splash-orbit-core"><img src="/tizpay-mark.png" alt="" /></span><i /><i /><i /></div>
         <p className="splash-kicker">MONEY, MADE CLEAR</p>
         <h1>Your money,<br /><span>at a glance.</span></h1>
         <p className="splash-caption">A calmer way to see, send, and manage your money.</p>
@@ -579,12 +579,12 @@ function App() {
       <div className="splash-footer"><span>SMARTER MONEY MOMENTS</span><span>01 <i /> 03</span></div>
     </main> : experience === 'auth' ? <main className="auth-page">
       <nav className="auth-nav" aria-label="Authentication navigation">
-        <a className="auth-brand" href="#signin" aria-label="TizPay"><span><CircleDollarSign size={20} /></span>tiz<span>pay</span></a>
+        <a className="auth-brand" href="#signin" aria-label="TizPay"><img src="/tizpay-logo.png" alt="TizPay" /></a>
         <div className="auth-nav-trust"><ShieldCheck size={15} /> A little more clarity, every day</div>
       </nav>
       <div className="auth-layout">
         <section className="auth-intro">
-          <div className="auth-intro-orb"><span><CircleDollarSign size={38} /></span><i /><i /><i /></div>
+          <div className="auth-intro-orb"><img src="/tizpay-mark.png" alt="" /><i /><i /><i /></div>
           <p className="auth-eyebrow">YOUR MONEY, AT A GLANCE</p>
           <h1>Make room for<br /><span>what matters.</span></h1>
           <p className="auth-intro-copy">One thoughtful place for your everyday money. See your balance, follow your activity, and feel more in control.</p>
@@ -652,8 +652,7 @@ function App() {
     <div className="app-shell">
       <aside className="sidebar">
         <a className="brand" href="#overview" aria-label="Tiz Pay home">
-          <span className="brand-mark"><CircleDollarSign size={21} strokeWidth={2.2} /></span>
-          <span>tiz<span className="brand-light">pay</span></span>
+          <img className="brand-logo" src="/tizpay-logo.png" alt="" />
         </a>
 
         <div className="workspace-label">WORKSPACE</div>
@@ -857,7 +856,7 @@ function App() {
           <div className="cards-modal-top"><div><div className="eyebrow">YOUR WALLET</div><h2 id="cards-title">Your cards</h2></div><button className="icon-button" title="Close" onClick={() => setCardsOpen(false)}><X size={19} /></button></div>
           <p className="cards-description">Your TizPay Visa debit card and security controls.</p>
           <div className={`visa-card ${cardFrozen ? 'visa-card-frozen' : ''}`}>
-            <div className="visa-card-top"><div className="visa-brand"><span className="visa-brand-mark"><CircleDollarSign size={17} /></span><span>tiz<span>pay</span></span></div><span className="visa-contactless">)))</span></div>
+            <div className="visa-card-top"><div className="visa-brand"><span className="visa-brand-mark"><img src="/tizpay-mark.png" alt="" /></span><span>tiz<span>pay</span></span></div><span className="visa-contactless">)))</span></div>
             <div className="visa-chip"><span /></div>
             <div className="visa-number" aria-label="Card number">
               <span>4242</span><span>{cardDetailsVisible ? '5618' : '••••'}</span><span>{cardDetailsVisible ? '0395' : '••••'}</span><span>1842</span>
