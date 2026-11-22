@@ -40,7 +40,10 @@ function storedAccessToken() {
 }
 
 function App() {
-  const [experience, setExperience] = useState('splash')
+  const [experience, setExperience] = useState(() => {
+    if (new URLSearchParams(window.location.search).has('reset_token')) return 'auth'
+    return storedAccessToken() ? 'dashboard' : 'home'
+  })
   const [authView, setAuthView] = useState(() => {
     const resetToken = new URLSearchParams(window.location.search).get('reset_token')
     return resetToken ? 'reset' : 'login'
@@ -91,22 +94,19 @@ function App() {
   const [notice, setNotice] = useState('')
   const chatEndRef = useRef(null)
 
-  function transitionToAuth() {
+  function transitionToAuth(view = 'login') {
+    const showAuth = () => {
+      setAuthView(view)
+      setAuthNotice('')
+      setAuthError(false)
+      setExperience('auth')
+    }
     if (document.startViewTransition) {
-      document.startViewTransition(() => setExperience('auth'))
+      document.startViewTransition(showAuth)
       return
     }
-    setExperience('auth')
+    showAuth()
   }
-
-  useEffect(() => {
-    const timer = window.setTimeout(() => {
-      if (new URLSearchParams(window.location.search).has('reset_token')) setExperience('auth')
-      else if (accessToken) setExperience('dashboard')
-      else transitionToAuth()
-    }, 5000)
-    return () => window.clearTimeout(timer)
-  }, [accessToken])
 
   useEffect(() => {
     if (!resetToken) return
@@ -566,18 +566,10 @@ function App() {
   }
 
   return (
-    experience === 'splash' ? <main className="tiz-splash" aria-label="TizPay loading screen">
-      <div className="splash-glow splash-glow-one" /><div className="splash-glow splash-glow-two" />
-      <div className="splash-content">
-        <div className="splash-logo"><img src="/tizpay-logo.png" alt="TizPay" /></div>
-        <div className="splash-orbit" aria-hidden="true"><span className="splash-orbit-core"><img src="/tizpay-mark.png" alt="" /></span><i /><i /><i /></div>
-        <p className="splash-kicker">MONEY, MADE CLEAR</p>
-        <h1>Your money,<br /><span>at a glance.</span></h1>
-        <p className="splash-caption">A calmer way to see, send, and manage your money.</p>
-        <div className="splash-progress" role="progressbar" aria-label="Loading TizPay"><span /></div>
-      </div>
-      <div className="splash-footer"><span>SMARTER MONEY MOMENTS</span><span>01 <i /> 03</span></div>
-    </main> : experience === 'auth' ? <main className="auth-page">
+    experience === 'home' ? <LandingPage
+      onLogin={() => transitionToAuth('login')}
+      onSignup={() => transitionToAuth('signup')}
+    /> : experience === 'auth' ? <main className="auth-page">
       <nav className="auth-nav" aria-label="Authentication navigation">
         <a className="auth-brand" href="#signin" aria-label="TizPay"><img src="/tizpay-logo.png" alt="TizPay" /></a>
         <div className="auth-nav-trust"><ShieldCheck size={15} /> A little more clarity, every day</div>
@@ -902,6 +894,159 @@ function App() {
       </div>
     </div>
     )
+  )
+}
+
+function LandingPage({ onLogin, onSignup }) {
+  const features = [
+    { icon: <CircleDollarSign size={20} />, title: 'Wallet overview', text: 'See a sample balance and money-in and money-out totals together.' },
+    { icon: <ArrowLeftRight size={20} />, title: 'Activity in one place', text: 'Browse, search, and review wallet activity in a simple timeline.' },
+    { icon: <FileText size={20} />, title: 'Useful everyday tools', text: 'Explore statements, account settings, and a wallet-card preview.' },
+    { icon: <ShieldCheck size={20} />, title: 'Demo transfers', text: 'Try wallet actions with simulated funds—no real payments happen.' },
+  ]
+  const faqs = [
+    { question: 'What is TizPay?', answer: 'TizPay is a wallet dashboard demo for exploring balances, activity, and account tools.' },
+    { question: 'Can I send or receive real money?', answer: 'No. Transfers, top-ups, and card details are simulated. No payment network or real card is connected.' },
+    { question: 'What happens when I create an account?', answer: 'You can sign in to a private demo wallet. Use only test information and never add real payment details or funds.' },
+  ]
+
+  return (
+    <main className="marketing-page" id="home">
+      <header className="marketing-header">
+        <div className="marketing-header-inner">
+          <a className="marketing-brand" href="#home" aria-label="TizPay home">
+            <img src="/tizpay-logo.png" alt="TizPay" />
+          </a>
+          <nav className="marketing-nav" aria-label="Main navigation">
+            <a href="#features">Features <ChevronDown size={14} /></a>
+            <a href="#about">About</a>
+            <a href="#security">Security</a>
+            <a href="#faq">FAQ</a>
+            <a href="#contact">Contact</a>
+          </nav>
+          <div className="marketing-actions">
+            <button className="marketing-login" onClick={onLogin}>Login</button>
+            <button className="marketing-start" onClick={onSignup}>Get Started <ArrowRight size={16} /></button>
+          </div>
+        </div>
+      </header>
+
+      <section className="marketing-hero" aria-labelledby="marketing-title">
+        <div className="marketing-hero-copy">
+          <p className="marketing-kicker"><Sparkles size={16} /> CLEAR <i /> SIMPLE <i /> DEMO</p>
+          <h1 id="marketing-title">Your money,<br />made <span>clear.</span></h1>
+          <p className="marketing-hero-description">A personal wallet dashboard to follow balances, review activity, and explore everyday money tools—all in one place.</p>
+          <div className="marketing-hero-actions">
+            <button className="marketing-start marketing-primary-cta" onClick={onSignup}>Create your account <ArrowRight size={17} /></button>
+            <button className="marketing-watch-cta" onClick={onLogin}><span><ArrowRight size={16} /></span> Sign in to explore</button>
+          </div>
+          <div className="marketing-hero-points">
+            <span><ShieldCheck size={22} /> Account-based<br />wallet access</span>
+            <span><ArrowLeftRight size={22} /> Activity in<br />one view</span>
+            <span><CircleDollarSign size={22} /> Simulated<br />funds only</span>
+          </div>
+          <p className="marketing-demo-disclaimer">Demo only. TizPay does not process real payments or transfers.</p>
+        </div>
+
+        <div className="marketing-hero-visual" role="img" aria-label="Illustration of the TizPay wallet preview with sample balance and simulated activity">
+          <div className="hero-visual-glow" />
+          <div className="hero-float-icon hero-send-icon"><Send size={23} /></div>
+          <div className="hero-float-icon hero-shield-icon"><ShieldCheck size={25} /></div>
+          <div className="hero-phone">
+            <div className="hero-phone-camera" />
+            <div className="hero-phone-screen">
+              <div className="hero-phone-header"><img src="/tizpay-mark.png" alt="" /><strong>TizPay</strong><Bell size={16} /></div>
+              <div className="hero-balance-card">
+                <span>SAMPLE BALANCE</span>
+                <strong>$2,750.00</strong>
+                <small>Simulated demo funds</small>
+              </div>
+              <div className="hero-shortcuts">
+                <span><Send size={15} />Send</span>
+                <span><ArrowDownLeft size={16} />Receive</span>
+                <span><CircleDollarSign size={16} />Add</span>
+              </div>
+              <div className="hero-activity-heading"><strong>Recent activity</strong><small>DEMO</small></div>
+              <div className="hero-activity-row"><i className="activity-in"><ArrowDownRight size={14} /></i><span><strong>Sample deposit</strong><small>Today · Demo activity</small></span><b>+$200</b></div>
+              <div className="hero-activity-row"><i><ArrowUpRight size={14} /></i><span><strong>Sample transfer</strong><small>Yesterday · Demo activity</small></span><b>−$50</b></div>
+              <div className="hero-phone-footnote">Illustrative preview · not a real account</div>
+            </div>
+          </div>
+          <div className="hero-demo-card">
+            <div className="hero-demo-card-top"><img src="/tizpay-mark.png" alt="" /><strong>TizPay</strong><span>DEMO</span></div>
+            <div className="hero-demo-chip" />
+            <div className="hero-demo-number">•••• &nbsp; •••• &nbsp; •••• &nbsp; 1842</div>
+            <div className="hero-demo-card-foot"><span>DEMO CARD</span><strong>NOT FOR PAYMENTS</strong></div>
+          </div>
+          <span className="hero-visual-note">Sample data only</span>
+        </div>
+      </section>
+
+      <section className="marketing-section marketing-features" id="features" aria-labelledby="features-title">
+        <div className="marketing-section-heading">
+          <p className="marketing-section-kicker">A CLEARER EVERYDAY VIEW</p>
+          <h2 id="features-title">The essentials, all together.</h2>
+          <p>Explore a simple wallet experience with helpful tools for keeping your demo activity in view.</p>
+        </div>
+        <div className="marketing-feature-grid">
+          {features.map((feature) => (
+            <article className="marketing-feature-card" key={feature.title}>
+              <span className="marketing-feature-icon">{feature.icon}</span>
+              <h3>{feature.title}</h3>
+              <p>{feature.text}</p>
+            </article>
+          ))}
+        </div>
+      </section>
+
+      <section className="marketing-about-section" id="about" aria-labelledby="about-title">
+        <div className="marketing-about-mark"><img src="/tizpay-mark.png" alt="" /></div>
+        <div>
+          <p className="marketing-section-kicker">ABOUT TIZPAY</p>
+          <h2 id="about-title">A calmer way to understand your wallet.</h2>
+          <p>TizPay brings a wallet snapshot, recent activity, and account tools into one straightforward dashboard. This project is a demo experience—not a financial institution or a payment service.</p>
+        </div>
+      </section>
+
+      <section className="marketing-security-section" id="security" aria-labelledby="security-title">
+        <div>
+          <p className="marketing-section-kicker">SECURITY &amp; PRIVACY</p>
+          <h2 id="security-title">Thoughtful safeguards. Honest limits.</h2>
+          <p>Passwords are stored as secure hashes, and private wallet actions require an authenticated account. Even so, this is a demo—not production financial software. Don’t use real payment details or funds.</p>
+        </div>
+        <span className="marketing-security-icon"><ShieldCheck size={32} /></span>
+      </section>
+
+      <section className="marketing-section marketing-faq" id="faq" aria-labelledby="faq-title">
+        <div className="marketing-section-heading">
+          <p className="marketing-section-kicker">GOOD TO KNOW</p>
+          <h2 id="faq-title">Frequently asked questions</h2>
+        </div>
+        <div className="marketing-faq-list">
+          {faqs.map((item) => (
+            <details key={item.question}>
+              <summary>{item.question}<ChevronDown size={17} /></summary>
+              <p>{item.answer}</p>
+            </details>
+          ))}
+        </div>
+      </section>
+
+      <section className="marketing-bottom-cta" id="contact" aria-labelledby="contact-title">
+        <div>
+          <p className="marketing-section-kicker">YOUR MONEY, MADE CLEAR</p>
+          <h2 id="contact-title">Take a look around.</h2>
+          <p>Create a demo account to explore the wallet experience. No real money is involved.</p>
+        </div>
+        <button className="marketing-start" onClick={onSignup}>Get Started <ArrowRight size={16} /></button>
+      </section>
+
+      <footer className="marketing-footer">
+        <a className="marketing-brand" href="#home" aria-label="TizPay home"><img src="/tizpay-logo.png" alt="TizPay" /></a>
+        <span>© 2025 TizPay · Demo wallet experience</span>
+        <a href="#security">Security &amp; demo details</a>
+      </footer>
+    </main>
   )
 }
 
